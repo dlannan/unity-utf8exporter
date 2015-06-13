@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+	<title>Sample City Three.js</title>
+		
+	<link rel="stylesheet" type="text/css" href="css/styles.css" />
+	
+	<script type="text/javascript" src="js/three.min.js"></script>
+	<script type="text/javascript" src="js/stats.js"></script>
+	<script type="text/javascript" src="js/dat.gui.min.js"></script>
+	<script type="text/javascript" src="js/cameras.js"></script>
+	<script type="text/javascript" src="js/controls_ui.js"></script>
+	
+	<script src="js/shaders/BleachBypassShader.js"></script>
+	<script src="js/shaders/CopyShader.js"></script>
+	<script src="js/shaders/DotScreenShader.js"></script>
+	<script src="js/shaders/RGBShiftShader.js"></script>
+	<script src="js/shaders/FilmShader.js"></script>
+	<script src="js/shaders/VignetteShader.js"></script>
+	
+    <script src="js/postprocessing/DotScreenPass.js"></script>
+	<script src="js/postprocessing/EffectComposer.js"></script>
+	<script src="js/postprocessing/RenderPass.js"></script>
+	<script src="js/postprocessing/MaskPass.js"></script>
+	<script src="js/postprocessing/ShaderPass.js"></script>
+	<script src="js/postprocessing/FilmPass.js"></script>
+	
+	<script src="js/shaders/Mirror.js"></script>
+	<script src="js/effects/OculusRiftEffect.js"></script>
+	
+	<script src="js/loaders/MTLLoader.js"></script>
+	<script src="js/loaders/OBJMTLLoader.js"></script>
+	<script src="js/loaders/UTF8Loader.js"></script>
+	
+	<script type="x-shader/x-vertex" id="vertexShader">
+
+		varying vec3 vWorldPosition;
+
+		void main() {
+
+			vec4 worldPosition = modelMatrix * vec4( position, 1.0 );
+			vWorldPosition = worldPosition.xyz;
+
+			gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+
+		}
+	</script>
+
+	<script type="x-shader/x-fragment" id="fragmentShader">
+
+		uniform vec3 topColor;
+		uniform vec3 bottomColor;
+		uniform float offset;
+		uniform float exponent;
+
+		varying vec3 vWorldPosition;
+
+		void main() {
+
+			float h = normalize( vWorldPosition + offset ).y;
+			gl_FragColor = vec4( mix( bottomColor, topColor, max( pow( h, exponent ), 0.0 ) ), 1.0 );
+
+		}
+	</script>
+	
+	<script type="text/javascript">
+	'use strict';
+	
+	var initScene, render, forward,
+		ground_material, box_material, render_clock,
+		projector, renderer, render_stats, scene, ground, dirLight, hemiLight,
+		camera, arena, vehicle_body, vehicle;
+		
+	var curr_camera_name, camera_drive, camera_top;
+			
+	var frame1_veh, frame2_veh, frame_time, frame_start;
+	var buff_frame1_veh, buff_frame2_veh, buff_frame_time, buff_frame_start;
+	var dae, skin, ctrltext;
+	
+    var composer;
+    var width, height;
+	
+	var uniforms = {
+		topColor: 	 { type: "c", value: new THREE.Color( 0x0077ff ) },
+		bottomColor: { type: "c", value: new THREE.Color( 0xffffff ) },
+		offset:		 { type: "f", value: 33 },
+		exponent:	 { type: "f", value: 0.6 }
+	};
+	
+	var effectOculus;
+	
+	// INITIALIZE SCENE
+			
+	initScene = function() {
+	    
+	    Cameras.init();
+        curr_camera_name = "DriverCamera"
+
+		projector = new THREE.Projector;
+		
+		renderer = new THREE.WebGLRenderer({ antialias: true });
+		renderer.setSize( window.innerWidth, window.innerHeight );
+		renderer.shadowMapSoft = true;
+
+		renderer.gammaInput = true;
+		renderer.gammaOutput = true;
+
+		renderer.shadowMapEnabled = true;
+		renderer.shadowMapCullFace = THREE.CullFaceBack;
+		renderer.autoClear = false;
+		document.getElementById( 'viewport' ).appendChild( renderer.domElement );
+		
+		render_stats = new Stats();
+		render_stats.domElement.style.position = 'absolute';
+		render_stats.domElement.style.top = '1px';
+		render_stats.domElement.style.zIndex = 100;
+		document.getElementById( 'viewport' ).appendChild( render_stats.domElement );
+
+		render_clock = new THREE.Clock(1);
+		render_clock.start();
+		frame_start  = render_clock.getElapsedTime();
+		
+		scene = new THREE.Scene();
+		scene.fog = new THREE.Fog( 0xffffff, 1, 5000 );
+		scene.fog.color.setHSL( 0.6, 0, 1 );
+		
+		camera_drive = Cameras.newCamera("DriverCamera");
+        camera_drive.position = new THREE.Vector3(0.0, 0.9, 1.5);
+        camera_drive.rotation = new THREE.Euler(0.0, Math.PI, 0.0);
+        
+		camera_top = Cameras.newCamera("TopCamera", 1);
+        camera_top.position = new THREE.Vector3(0.0, 30, 2.5);
+        camera_top.rotation = new THREE.Euler( Math.PI * -0.5, 0.0, 0.0);
+		
+		// LIGHTS
+
+		// Some ambient lighting
+		scene.add( new THREE.AmbientLight( 0x111111 ) );
+		
+		hemiLight = new THREE.HemisphereLight( 0x9090b0, 0xa01010, 0.6 );
+		hemiLight.position.set( 0, 500, 0 );
+		hemiLight.castShadow = false;
+		scene.add( hemiLight );
+				
+		//
+
+		dirLight = new THREE.DirectionalLight( 0xffffff, 1 );
+		dirLight.color.setHSL( 0.1, 1, 0.95 );
+		dirLight.position.set( -1, 1.75, 1 );
+		dirLight.position.multiplyScalar( 50 );
+		scene.add( dirLight );
+
+		dirLight.castShadow = true;
+
+		dirLight.shadowMapWidth = 2048;
+		dirLight.shadowMapHeight = 2048;
+
+		var d = 50;
+
+		dirLight.shadowCameraLeft = -d;
+		dirLight.shadowCameraRight = d;
+		dirLight.shadowCameraTop = d;
+		dirLight.shadowCameraBottom = -d;
+
+		dirLight.shadowCameraFar = 1000;
+		dirLight.shadowBias = -0.0001;
+		dirLight.shadowDarkness = 0.35;
+		//dirLight.shadowCameraVisible = true;
+
+
+		var input;
+		
+		// Materials
+		var groundMat = new THREE.MeshPhongMaterial( { ambient: 0xffffff, color: 0xffffff, specular: 0x050505 } );
+
+		// GROUND
+
+		var groundGeo = new THREE.PlaneGeometry( 10000, 10000 );
+		groundMat.color.setHSL( 0.095, 1, 0.75 );
+		var ground = new THREE.Mesh( groundGeo, groundMat );
+		scene.add(ground);
+
+		// SKYDOME
+
+		var vertexShader = document.getElementById( 'vertexShader' ).textContent;
+		var fragmentShader = document.getElementById( 'fragmentShader' ).textContent;
+
+		uniforms.topColor.value.copy( hemiLight.color );
+
+		scene.fog.color.copy( uniforms.bottomColor.value );
+		renderer.setClearColor( scene.fog.color, 1 );
+
+		var skyGeo = new THREE.SphereGeometry( 4000, 32, 15 );
+		var skyMat = new THREE.ShaderMaterial( { vertexShader: vertexShader, fragmentShader: fragmentShader, uniforms: uniforms, side: THREE.BackSide } );
+		var sky = new THREE.Mesh( skyGeo, skyMat );
+		sky.castShadow = false;
+		scene.add( sky );
+		ctrltext = ControlsUi.init();
+		// Load truck model using the AssimpJSONLoader		var uloader = new THREE.UTF8Loader();
+		uloader.load( "models/SampleCity.js", function ( object ) {
+			scene.add( object );
+			scene.updateMatrixWorld();		} , { normalizeRGB: true } );				
+        Cameras.changeCamera("DriverCamera");
+        camera = Cameras.curr_camera;
+        
+        // postprocessing
+        composer = new THREE.EffectComposer( renderer );
+        composer.addPass( new THREE.RenderPass( scene, camera ) );
+        
+        var effect = new THREE.ShaderPass( THREE.VignetteShader );
+		effect.uniforms[ "offset" ].value = 0.95;
+		effect.uniforms[ "darkness" ].value = 1.6;
+        //effect.uniforms[ 'scale' ].value = 4;
+        composer.addPass( effect );
+
+        //var effectBleach = new THREE.ShaderPass( THREE.BleachBypassShader );
+        //effectBleach.uniforms[ "opacity" ].value = 0.95;
+        //composer.addPass( effectBleach );
+
+		var effect = new THREE.FilmPass( 0.35, 0.5, 2048, true );
+		//effect.uniforms[ 'amount' ].value = 0.0015;
+		effect.renderToScreen = true;
+		composer.addPass( effect );        
+        
+		// Here is the effect for the Oculus Rift
+		// worldScale 100 means that 100 Units == 1m
+		effectOculus = new THREE.OculusRiftEffect( renderer, {worldScale: 100} );
+		effectOculus.setSize( window.innerWidth, window.innerHeight );
+				
+        window.addEventListener( 'resize', onWindowResize, false );
+		requestAnimationFrame( render );
+	};
+	
+	// RENDER
+	
+	render = function() {
+
+		requestAnimationFrame( render );
+		
+		if (Cameras.curr_camera ) {
+ 			var rtime = render_clock.getDelta();//render_clock.getElapsedTime() - buff_frame_start;
+ 			var alpha = 0.0;
+ 			if(buff_frame_time > 0.0) { alpha = rtime / buff_frame_time; }
+
+            // If controls in view then use them 
+            Cameras.curr_camera.position.set(ctrltext.camX,ctrltext.camY,ctrltext.camZ);			dirLight.target = Cameras.curr_camera;
+		}
+		
+		camera = Cameras.curr_camera;
+		if(ctrltext.enableOculus === true){
+			effectOculus.render( scene, Cameras.curr_camera );
+		}
+		else {
+			renderer.render( scene, Cameras.curr_camera );
+		}	
+		render_stats.update();
+	};
+	
+	function onWindowResize() {
+		
+		var windowHalfX = window.innerWidth / 2;
+		var windowHalfY = window.innerHeight / 2;
+
+		width = window.innerWidth;
+		height = window.innerHeight;
+
+		camera.aspect = width / height;
+		camera.updateProjectionMatrix();
+
+		renderer.setSize( width, height );
+		if(ctrltext.loading < 100) {
+            composer.setSize(width, height);
+		}
+		if(ctrltext.enableOculus === true) {
+		    effectOculus.setSize( width, height );
+		}
+	}
+
+	window.onload = initScene;
+	
+	</script>
+</head>
+
+<body>
+	<div id="heading">
+		<h1>Sample City - UTF8 Loader Example</h1>
+	</div>
+	<div id="viewport"></div>
+</body>
+
+</html>
