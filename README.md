@@ -16,3 +16,10 @@ There are a number of limitations with this system.
 - No complex sub materials etc.
 - No Atlasing (although thats being added soon)
 - Fixed quantisation of coords, uvs, normals.
+
+# Future Work
+Move the whole conversion system into Unity C# and throw away the OBJExporter entirely.
+A number of major changes need to be done to best execute this.
+- C -> C# conversion (should be relatively ok, since its mostly math based).
+- A decent Window panel in Unity to set UTF8 configuration (like quantization levels and so on).
+- An improved UTF8 loader to support various features.
