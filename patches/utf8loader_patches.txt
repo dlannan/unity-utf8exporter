@@ -1,0 +1,57 @@
+In Utf8Convertor (Obj -> Utf8)
+In bounds.h Line 79
+    // TexCoord.
+    // TODO: get bounds-dependent texcoords working!
+    for (size_t i = 3; i < 5; ++i) {
+	  const float scale = 4.0f; 
+      const int maxTexcoord = (1 << 14) - 1; // 16383;
+      ret.mins[i] = -2.0f;
+      ret.scales[i] = scale;
+      ret.outputMaxes[i] = maxTexcoord; 
+      ret.decodeOffsets[i] = maxTexcoord * -2.0f / scale;
+      ret.decodeScales[i] = scale / maxTexcoord;
+    }
+	
+In mesh.h Line 541
+  void ParseTexCoord(const ShortFloatList& floats, unsigned int line_num) {
+    if ((floats.size() < 1) || (floats.size() > 3)) {
+      // TODO: correctly handle 3-D texcoords intead of just
+      // truncating.
+      ErrorLine("bad texcoord", line_num);
+    }
+    const float u = floats[0];
+    const float v = floats[1];
+	float u1 = u;
+	float v1 = v;
+
+	if(u < -1.0f) u1 = 1.0f / u - 1.0f;
+	if(v < -1.0f) v1 = 1.0f / v - 1.0f;
+
+	// If coord is greater than 1.0 then it is a multiplier
+	if(u > 1.0f) u1 = 1.0f / u + 1.0f;
+	if(v > 1.0f) v1 = 1.0f / v + 1.0f;
+
+	texcoords_.push_back(u1);
+	texcoords_.push_back(v1);
+  }
+  
+ -------------------------------------------------------------------------
+ 
+ In UTF8Loader Line 69  in threejs/loaders
+ 
+	var uu, vv;
+ 	for( i = offset; i < end; i += stride ) {
+
+		u = attribArray[ i ];
+		v = attribArray[ i + 1 ];
+        uu = u;
+        vv = v;
+
+        if(u < -1.0)    uu = 1.0/(u + 1.0);
+        if(v < -1.0)    vv = 1.0/(v + 1.0);
+        if(u > 1.0)     uu = 1.0/(u - 1.0);
+        if(v > 1.0)     vv = 1.0/(v - 1.0);
+		
+		uvArray[ j++ ] = uu;
+		uvArray[ j++ ] = vv;
+	}
