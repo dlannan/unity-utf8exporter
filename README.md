@@ -4,12 +4,17 @@ Exporter toolset for creating utf8 mesh (and material) files for use with ThreeJ
 The current Unity to UTF8 process is using a number of tools, some patched with minor fixes.
 The process currently
 
-1. Export the scene using OBJExporter in Unity.
-2. Run the OBJ to UTF8 convertor taken from Google Code with patches. (See patches folder)
-   Preferably capture the json output if you wish to use materials like so:
-   UTF8Convertor [OBJ filename] [UTF8 filename] > [Material .json filename]
+1. Export the scene using OBJExporter in Unity (See original/Unity/OBJExporter).
+2. Run the OBJ to UTF8 convertor taken from Google Code with patches. (See patches folder and original/Unity/obj2utf8)
+   Example usage of the convertor.
+```
+   UTF8Conv.exe SampleCity.obj SampleCity.utf8 > SampleCity.js
+```
 3. Copy the generated textures folder, the UTF8 and material file (json) to your ThreeJS model folder
 4. Load in using the UTF8Loader for ThreeJS with the modified patch (See patches folder)
+
+A sample ThreeJS website has been provided to load in a sample scene. 
+Note: The built binary is for Windows systems only. You will need to build the convertor seperately for your platform as needed ( See original/Unity/obj2utf8 ).
 
 There are a number of limitations with this system:
 - No animation supported
